@@ -1,0 +1,172 @@
+/* LearnSphere LMS - Custom Styles */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --primary-color: #2563eb;
+  --primary-hover: #1d4ed8;
+  --secondary-color: #64748b;
+  --dark-bg: #0f172a;
+  --card-bg: #ffffff;
+  --body-bg: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--body-bg);
+  color: #1e293b;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Navbar */
+.navbar {
+  padding: 0.85rem 1.5rem;
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%) !important;
+  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.15);
+}
+
+.navbar-brand {
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  font-size: 1.4rem;
+}
+
+/* Cards & Components */
+.card {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background: #ffffff;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+}
+
+.course-card .card-img-top {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+/* Hero Section */
+.hero-section {
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  border-radius: 16px;
+  border: 1px solid #dbeafe;
+  padding: 4rem 2rem;
+  margin-bottom: 3rem;
+  text-align: center;
+}
+
+.hero-title {
+  font-weight: 800;
+  font-size: 2.75rem;
+  color: #1e3a8a;
+  letter-spacing: -1px;
+}
+
+.hero-subtitle {
+  font-size: 1.25rem;
+  color: #475569;
+  max-width: 700px;
+  margin: 1rem auto 2rem auto;
+  line-height: 1.6;
+}
+
+/* Badges */
+.badge {
+  font-weight: 600;
+  padding: 0.4em 0.75em;
+  border-radius: 6px;
+}
+
+/* Buttons */
+.btn-primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  font-weight: 600;
+  padding: 0.6rem 1.4rem;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+/* Footer */
+footer {
+  background-color: #0f172a !important;
+  border-top: 1px solid #1e293b;
+  font-size: 0.9rem;
+  padding: 1.5rem 0;
+}
+
+/* Accessibility: High Contrast Mode for Visually Impaired */
+.high-contrast-mode {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+.high-contrast-mode body,
+.high-contrast-mode #root,
+.high-contrast-mode .bg-light,
+.high-contrast-mode .card,
+.high-contrast-mode .accordion-item,
+.high-contrast-mode .accordion-button,
+.high-contrast-mode .list-group-item {
+  background-color: #121212 !important;
+  color: #ffffff !important;
+  border-color: #444444 !important;
+}
+
+.high-contrast-mode a,
+.high-contrast-mode .text-primary,
+.high-contrast-mode .navbar-brand {
+  color: #38bdf8 !important;
+}
+
+.high-contrast-mode .text-secondary,
+.high-contrast-mode .text-muted {
+  color: #cbd5e1 !important;
+}
+
+.high-contrast-mode .btn-primary {
+  background-color: #0284c7 !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+}
+
+/* Accessibility: Text Scaling */
+.font-scale-large body {
+  font-size: 1.18rem !important;
+}
+
+.font-scale-xlarge body {
+  font-size: 1.35rem !important;
+}
+
+.font-scale-large h1, .font-scale-large .hero-title { font-size: 3.2rem !important; }
+.font-scale-xlarge h1, .font-scale-xlarge .hero-title { font-size: 3.8rem !important; }
+
+/* Keyboard Focus Indicators for Motor & Visual Impairment */
+:focus-visible {
+  outline: 3px solid #2563eb !important;
+  outline-offset: 2px !important;
+}

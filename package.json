@@ -1,0 +1,15 @@
+{
+  "name": "learnsphere-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LearnSphere LMS Root Workspace",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "node frontend/pack-app.cjs",
+    "desktop": "npm --prefix frontend run desktop",
+    "start": "cmd /c start-learnsphere.bat"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.0"
+  }
+}
