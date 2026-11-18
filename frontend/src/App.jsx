@@ -11,6 +11,7 @@ import Courses from './pages/Courses';
 import CourseDetails from './pages/CourseDetails';
 import CoursePlayer from './pages/CoursePlayer';
 import QuizPage from './pages/QuizPage';
+import VivaExam from './pages/VivaExam';
 import Certificate from './pages/Certificate';
 import StudentDashboard from './pages/StudentDashboard';
 import Gradebook from './pages/Gradebook';
@@ -72,6 +73,7 @@ const App = () => {
                     {/* Student Learning, Interactive Modules & Assessments */}
                     <Route path="/learn/:id" element={<CoursePlayer />} />
                     <Route path="/courses/:courseId/quiz" element={<QuizPage />} />
+                    <Route path="/courses/:courseId/viva" element={<VivaExam />} />
                     <Route path="/certificate/:code" element={<Certificate />} />
                     <Route path="/student" element={<StudentDashboard />} />
                     <Route path="/my-learning" element={<StudentDashboard />} />

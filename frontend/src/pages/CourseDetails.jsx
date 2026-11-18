@@ -227,12 +227,20 @@ const CourseDetails = () => {
                                     )}
                                 </p>
                             </div>
-                            <Link 
-                                to={course.is_final_unlocked ? `/courses/${course.id}/quiz` : '#'} 
-                                className={`btn ${course.is_final_unlocked ? 'btn-primary' : 'btn-secondary disabled'} fw-bold px-4`}
-                            >
-                                {course.is_final_unlocked ? 'Take Final Exam 📝' : 'Exam Locked 🔒'}
-                            </Link>
+                            <div className="d-flex gap-2 flex-wrap">
+                                <Link 
+                                    to={course.is_final_unlocked ? `/courses/${course.id}/quiz` : '#'} 
+                                    className={`btn ${course.is_final_unlocked ? 'btn-primary' : 'btn-secondary disabled'} fw-bold px-3`}
+                                >
+                                    {course.is_final_unlocked ? 'Take Final Exam 📝' : 'Exam Locked 🔒'}
+                                </Link>
+                                <Link 
+                                    to={`/courses/${course.id}/viva`} 
+                                    className="btn btn-outline-primary fw-bold px-3"
+                                >
+                                    🎙️ AI Oral Viva (Voce)
+                                </Link>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -177,6 +177,12 @@ const Navbar = () => {
                                                 📁 {t('resources')}
                                             </Link>
                                         </li>
+                                        <li><hr className="dropdown-divider my-1" /></li>
+                                        <li>
+                                            <Link className={`dropdown-item py-2 fw-semibold text-primary ${isActive('/courses/1/viva') ? 'active bg-primary text-white' : ''}`} to="/courses/1/viva">
+                                                🎙️ AI Oral Viva Examination
+                                            </Link>
+                                        </li>
                                     </ul>
                                 </div>
                             </div>

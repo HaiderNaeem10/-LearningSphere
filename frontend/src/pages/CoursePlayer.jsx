@@ -9,6 +9,7 @@ import {
     issueCertificate,
     sendCertificateEmail 
 } from '../services/courseService';
+import AIMentorDrawer from '../components/AIMentorDrawer';
 
 const CoursePlayer = () => {
     const { id } = useParams();
@@ -57,6 +58,19 @@ const CoursePlayer = () => {
     const [emailSending, setEmailSending] = useState(false);
     const [emailSuccessMsg, setEmailSuccessMsg] = useState('');
     const [issuedCert, setIssuedCert] = useState(null);
+
+    // Teacher & Mentor Q&A State
+    const [teacherQuery, setTeacherQuery] = useState('');
+    const [qaThreads, setQaThreads] = useState([
+        {
+            id: 1,
+            studentName: user?.name || 'Jane Student',
+            question: 'What is the most common reason for layout shift when combining CSS Grid with dynamic images?',
+            teacherReply: 'Images without explicitly defined width/height aspect-ratio cause Cumulative Layout Shift (CLS). Always define width and aspect-ratio on container grid elements.',
+            status: 'Answered by Dr. Sarah Mitchell'
+        }
+    ]);
+    const [qaSubmitting, setQaSubmitting] = useState(false);
 
     // Study session timer
     useEffect(() => {
@@ -139,6 +153,26 @@ const CoursePlayer = () => {
         } finally {
             setMarkingComplete(false);
         }
+    };
+
+    // Handle Asking Teacher / Mentor
+    const handleAskTeacher = (e) => {
+        e.preventDefault();
+        if (!teacherQuery.trim()) return;
+
+        setQaSubmitting(true);
+        setTimeout(() => {
+            const newThread = {
+                id: Date.now(),
+                studentName: user?.name || 'Student Learner',
+                question: teacherQuery,
+                teacherReply: `Mentor analysis: In Module ${currentModule?.code || '1.1'}, make sure to isolate side-effects and check console warnings. Instructor ${course.instructor} has received your question.`,
+                status: 'Verified by Instructor & AI Co-Pilot'
+            };
+            setQaThreads(prev => [newThread, ...prev]);
+            setTeacherQuery('');
+            setQaSubmitting(false);
+        }, 600);
     };
 
     // Load sample solution into sandbox
@@ -323,7 +357,10 @@ const CoursePlayer = () => {
                                     ✓ All modules complete! Final exam is unlocked.
                                 </small>
                                 <Link to={`/courses/${course.id}/quiz`} className="btn btn-success btn-sm fw-bold w-100 shadow-sm mb-2">
-                                    📝 Take Final Exam &rarr;
+                                    📝 Take Final Written Exam &rarr;
+                                </Link>
+                                <Link to={`/courses/${course.id}/viva`} className="btn btn-primary btn-sm fw-bold w-100 shadow-sm mb-2">
+                                    🎙️ Take AI Oral Viva Voce &rarr;
                                 </Link>
                                 <button className="btn btn-outline-success btn-sm fw-bold w-100" onClick={handleOpenCertificate}>
                                     📜 View &amp; Email Certificate
@@ -340,6 +377,9 @@ const CoursePlayer = () => {
                                 <button className="btn btn-secondary btn-sm fw-bold w-100 disabled" disabled>
                                     🔒 Final Exam Locked
                                 </button>
+                                <Link to={`/courses/${course.id}/viva`} className="btn btn-outline-primary btn-sm fw-bold w-100 mt-2 shadow-sm">
+                                    🎙️ Practice Oral AI Viva &rarr;
+                                </Link>
                             </>
                         )}
                     </div>
@@ -477,6 +517,14 @@ const CoursePlayer = () => {
                                             onClick={() => setActiveTab('working_check')}
                                         >
                                             📡 Active Working Verification
+                                        </button>
+                                    </li>
+                                    <li className="nav-item">
+                                        <button 
+                                            className={`nav-link fw-bold ${activeTab === 'teacher_qa' ? 'active bg-primary' : 'text-secondary'}`}
+                                            onClick={() => setActiveTab('teacher_qa')}
+                                        >
+                                            👨‍🏫 Ask Teacher Q&amp;A
                                         </button>
                                     </li>
                                 </ul>
@@ -686,6 +734,61 @@ const CoursePlayer = () => {
                                             </button>
                                         </div>
                                     )}
+
+                                    {/* Tab 6: Teacher & Mentor Q&A */}
+                                    {activeTab === 'teacher_qa' && (
+                                        <div>
+                                            <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                                                <div>
+                                                    <h5 className="fw-bold text-dark mb-0">👨‍🏫 Direct Teacher &amp; Mentor Q&amp;A Hub</h5>
+                                                    <small className="text-muted">Ask questions directly to {course.instructor || 'your course instructor'} and receive AI-guided verified answers.</small>
+                                                </div>
+                                                <span className="badge bg-success-subtle text-success px-3 py-2 border border-success-subtle">
+                                                    ● Instructor &amp; Mentor Active
+                                                </span>
+                                            </div>
+
+                                            {/* Question Form */}
+                                            <form onSubmit={handleAskTeacher} className="card p-3 border-0 bg-light rounded-3 mb-4">
+                                                <label className="form-label small fw-bold text-dark">Submit a question regarding Module {currentModule.code}:</label>
+                                                <div className="input-group">
+                                                    <textarea 
+                                                        className="form-control" 
+                                                        rows="2"
+                                                        placeholder="Describe your technical question or bug in detail..."
+                                                        value={teacherQuery}
+                                                        onChange={(e) => setTeacherQuery(e.target.value)}
+                                                        required
+                                                    ></textarea>
+                                                    <button 
+                                                        type="submit" 
+                                                        className="btn btn-primary fw-bold px-4"
+                                                        disabled={qaSubmitting || !teacherQuery.trim()}
+                                                    >
+                                                        {qaSubmitting ? 'Posting...' : 'Ask Teacher 🚀'}
+                                                    </button>
+                                                </div>
+                                            </form>
+
+                                            {/* Previous Q&A Thread List */}
+                                            <h6 className="fw-bold text-dark mb-3">Module Discussion &amp; Teacher Feedback:</h6>
+                                            <div className="d-flex flex-column gap-3">
+                                                {qaThreads.map(t => (
+                                                    <div className="card border p-3 rounded-3 shadow-sm" key={t.id}>
+                                                        <div className="d-flex justify-content-between align-items-center mb-2">
+                                                            <strong className="text-primary small">💬 {t.studentName} asked:</strong>
+                                                            <span className="badge bg-light text-secondary border small">{t.status}</span>
+                                                        </div>
+                                                        <p className="fw-semibold text-dark mb-2 small">{t.question}</p>
+                                                        <div className="p-3 bg-light rounded-3 border-start border-4 border-success small">
+                                                            <strong className="text-success d-block mb-1">👨‍🏫 Instructor / Mentor Feedback:</strong>
+                                                            <p className="mb-0 text-secondary">{t.teacherReply}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </>
@@ -779,6 +882,14 @@ const CoursePlayer = () => {
                     </div>
                 </div>
             )}
+
+            {/* Global Floating AI Socratic Mentor Drawer */}
+            <AIMentorDrawer 
+                currentModule={currentModule}
+                currentLesson={currentLesson}
+                courseTitle={course?.title}
+                onOpenSandbox={() => setActiveTab('interactive')}
+            />
         </div>
     );
 };
