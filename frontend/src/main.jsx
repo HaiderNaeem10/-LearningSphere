@@ -4,6 +4,7 @@ import App from './App.jsx'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import './index.css'
+import './supabaseTest';
 import { AuthProvider } from './context/AuthContext'
 import { AccessibilityProvider } from './context/AccessibilityContext'
 import { LanguageProvider } from './context/LanguageContext'

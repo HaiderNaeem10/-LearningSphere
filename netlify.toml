@@ -1,0 +1,15 @@
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  VITE_SUPABASE_URL = "https://yojsslbmcfxpodxqwcmr.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvanNzbGJtY2Z4cG9keHF3Y21yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNjI0MzQsImV4cCI6MjEwOTkzODQzNH0.SPer5TDz6fjlhebTRfKCpcJ0ZQrv-5KhpyYSa0oLSsM"
+
+# SPA redirect rule so React Router routes (/courses, /learn/:id, /certificate/:code) never 404 on refresh
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -33,7 +33,7 @@ create table if not exists modules (
   id uuid primary key default gen_random_uuid(),
   course_id uuid references courses(id) not null,
   "order" integer not null,                 -- integer order within the course
-  code text generated always as (concat(course_id::text, '.', "order"::text)) stored, -- e.g., 1.1, 1.2
+  code text, -- e.g., 1.1, 1.2
   title text not null,
   description text,
   sample_solution text,                     -- optional sample solution for the module
@@ -58,8 +58,7 @@ create table if not exists module_progress (
   module_id uuid references modules(id) not null,
   completed boolean default false,
   started_at timestamp default now(),
-  completed_at timestamp,
-  check (student_id <> module_id) -- just a sanity check
+  completed_at timestamp
 );
 
 -- 7. Quizzes – one per module (optional) and a final quiz per course

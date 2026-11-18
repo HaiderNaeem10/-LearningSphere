@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 import { AccessibilityContext } from '../context/AccessibilityContext';
+import { getCourseDetails, issueCertificate, sendCertificateEmail } from '../services/courseService';
 
 const CircularProgressGauge = ({ percentage, isPassed }) => {
     const size = 180;
@@ -57,6 +58,7 @@ const QuizPage = () => {
     const { user } = useContext(AuthContext);
     const { speak, stopSpeaking, isSpeaking } = useContext(AccessibilityContext);
 
+    const [courseDetails, setCourseDetails] = useState(null);
     const [quiz, setQuiz] = useState(null);
     const [answers, setAnswers] = useState({});
     const [skippedQuestions, setSkippedQuestions] = useState(new Set());
@@ -65,36 +67,75 @@ const QuizPage = () => {
     const [result, setResult] = useState(null);
     const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
 
-    useEffect(() => {
-        if (!user) {
-            navigate('/login');
-            return;
-        }
+    // Email dispatch state in results screen
+    const [emailInput, setEmailInput] = useState(user?.email || 'student@learnsphere.com');
+    const [sendingEmail, setSendingEmail] = useState(false);
+    const [emailSuccess, setEmailSuccess] = useState('');
+    const [emailError, setEmailError] = useState('');
 
-        const fetchQuiz = async () => {
+    useEffect(() => {
+        const fetchAssessment = async () => {
+            setLoading(true);
             try {
-                let url = `/quizzes/details.php?course_id=${courseId}`;
-                if (quizIdParam) {
-                    url += `&quiz_id=${quizIdParam}`;
+                // Load course details to evaluate module lock state
+                const course = await getCourseDetails(courseId, user?.id);
+                setCourseDetails(course);
+
+                // If this is the final exam and it's locked, we don't need to fetch questions
+                if (!quizIdParam && !course.is_final_unlocked) {
+                    setLoading(false);
+                    return;
                 }
-                const response = await api.get(url);
-                setQuiz(response.data);
+
+                // Try backend API first
+                try {
+                    let url = `/quizzes/details.php?course_id=${courseId}`;
+                    if (quizIdParam) url += `&quiz_id=${quizIdParam}`;
+                    const res = await api.get(url);
+                    if (res.data && Array.isArray(res.data.questions) && res.data.questions.length > 0) {
+                        setQuiz(res.data);
+                        setLoading(false);
+                        return;
+                    }
+                } catch {
+                    // API offline, use robust template
+                }
+
+                // Fallback to course final exam or module quiz
+                if (course.final_exam) {
+                    setQuiz({
+                        id: course.final_exam.id,
+                        title: course.final_exam.title,
+                        description: course.final_exam.description,
+                        passing_percentage: course.final_exam.passing_percentage || 70,
+                        questions: course.final_exam.questions.map(q => ({
+                            id: q.id,
+                            question_text: q.question,
+                            marks: 1,
+                            explanation: q.explanation,
+                            options: q.options.map((opt, oIdx) => ({
+                                id: oIdx,
+                                option_text: opt,
+                                is_correct: oIdx === q.correct ? 1 : 0
+                            }))
+                        }))
+                    });
+                }
             } catch (error) {
-                console.error("Error fetching quiz", error);
+                console.error("Error fetching assessment:", error);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchQuiz();
-    }, [courseId, quizIdParam, user, navigate]);
+        fetchAssessment();
+    }, [courseId, quizIdParam, user]);
 
     const handleOptionSelect = (questionId, optionId) => {
         setAnswers(prev => ({
             ...prev,
             [questionId]: optionId
         }));
-        // Remove from skipped set if selected
         setSkippedQuestions(prev => {
             const next = new Set(prev);
             next.delete(questionId);
@@ -115,7 +156,6 @@ const QuizPage = () => {
 
     const handleSubmit = async (e) => {
         if (e) e.preventDefault();
-        
         if (!quiz || !quiz.questions) return;
 
         const totalQuestions = quiz.questions.length;
@@ -123,37 +163,140 @@ const QuizPage = () => {
 
         if (answeredCount < totalQuestions) {
             const confirmSubmit = window.confirm(
-                `You have answered ${answeredCount} of ${totalQuestions} questions (${totalQuestions - answeredCount} unanswered or skipped). Are you sure you want to submit your final assessment now?`
+                `You have answered ${answeredCount} of ${totalQuestions} questions. Are you sure you want to submit your final assessment now?`
             );
             if (!confirmSubmit) return;
         }
 
         setSubmitting(true);
-        const formattedAnswers = Object.keys(answers).map(qId => ({
-            question_id: parseInt(qId),
-            option_id: parseInt(answers[qId])
-        }));
 
         try {
-            const response = await api.post('/quizzes/submit.php', {
-                quiz_id: quiz.id,
-                student_id: user.id,
-                answers: formattedAnswers
+            // Local calculation fallback
+            let score = 0;
+            const review = [];
+
+            quiz.questions.forEach(q => {
+                const userChoice = answers[q.id];
+                const correctOpt = q.options.find(o => o.is_correct === 1);
+                const isCorrect = userChoice !== undefined && userChoice === correctOpt?.id;
+                if (isCorrect) score += (q.marks || 1);
+
+                review.push({
+                    question_id: q.id,
+                    question_text: q.question_text,
+                    marks: q.marks || 1,
+                    explanation: q.explanation,
+                    selected_option_id: userChoice,
+                    correct_option_id: correctOpt?.id,
+                    is_correct: isCorrect,
+                    options: q.options
+                });
             });
-            setResult(response.data);
+
+            const totalMarks = quiz.questions.reduce((acc, q) => acc + (q.marks || 1), 0);
+            const percentage = totalMarks > 0 ? Math.round((score / totalMarks) * 100) : 0;
+            const passingPercentage = quiz.passing_percentage || 70;
+            const isPassed = percentage >= passingPercentage;
+
+            let certificateCode = null;
+            if (isPassed) {
+                const cert = await issueCertificate({
+                    courseId,
+                    student: user || { id: 'guest', name: 'Learner', email: emailInput },
+                    percentage
+                });
+                certificateCode = cert.unique_code;
+            }
+
+            setResult({
+                score,
+                total_marks: totalMarks,
+                percentage,
+                passing_percentage: passingPercentage,
+                is_passed: isPassed,
+                certificate_code: certificateCode,
+                review
+            });
+
             window.scrollTo({ top: 0, behavior: 'smooth' });
         } catch (error) {
-            alert('Failed to submit quiz. Please verify your connection.');
+            console.error('Quiz evaluation error:', error);
+            alert('Encountered an evaluation issue. Please retry.');
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    // Handle Email Dispatch
+    const handleSendCertificateEmail = async (e) => {
+        e.preventDefault();
+        setEmailError('');
+        setEmailSuccess('');
+
+        if (!emailInput || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput)) {
+            setEmailError('Please enter an existing, valid email address.');
+            return;
+        }
+
+        setSendingEmail(true);
+        try {
+            const res = await sendCertificateEmail(result.certificate_code, emailInput);
+            setEmailSuccess(`✓ Certificate dispatched to ${emailInput}! Check your inbox for the verified credential.`);
+        } catch (err) {
+            setEmailError(err.message || 'Failed to dispatch email.');
+        } finally {
+            setSendingEmail(false);
         }
     };
 
     if (loading) {
         return (
             <div className="container py-5 text-center">
-                <div className="spinner-border text-primary my-5" role="status"></div>
-                <p className="text-secondary">Loading Coursera-style assessment...</p>
+                <div className="spinner-border text-primary my-5" role="status" style={{ width: '3rem', height: '3rem' }}></div>
+                <p className="text-secondary">Loading comprehensive assessment &amp; verifying prerequisites...</p>
+            </div>
+        );
+    }
+
+    // ==========================================
+    // LOCKED FINAL EXAM SCREEN
+    // ==========================================
+    if (courseDetails && !quizIdParam && !courseDetails.is_final_unlocked) {
+        return (
+            <div className="container py-5 text-center">
+                <div className="card p-5 border-0 shadow-sm mx-auto rounded-4" style={{ maxWidth: '680px' }}>
+                    <div className="display-3 mb-3">🔒</div>
+                    <h3 className="fw-bold text-dark mb-2">Final Course Examination is Locked</h3>
+                    <p className="lead text-secondary mb-3">
+                        Pedagogical Mastery Requirement: You must complete and certify all prior curriculum modules (1.1, 1.2, 1.3, 1.4) before this examination unlocks.
+                    </p>
+
+                    <div className="p-3 bg-light rounded-3 border mb-4 text-start">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                            <span className="fw-bold text-dark">Course Curriculum Progress:</span>
+                            <span className="badge bg-primary fs-6">{courseDetails.progress_percentage || 0}%</span>
+                        </div>
+                        <div className="progress mb-2" style={{ height: '10px' }}>
+                            <div 
+                                className="progress-bar bg-primary" 
+                                role="progressbar" 
+                                style={{ width: `${courseDetails.progress_percentage || 0}%` }}
+                            ></div>
+                        </div>
+                        <small className="text-danger fw-semibold d-block">
+                            ⚠️ {courseDetails.remaining_modules_for_final || 1} module(s) currently uncertified. Complete them in the Course Player to unlock the final test.
+                        </small>
+                    </div>
+
+                    <div className="d-flex justify-content-center gap-3 flex-wrap">
+                        <Link to={`/learn/${courseId}`} className="btn btn-primary fw-bold px-4 py-2 shadow-sm">
+                            ▶️ Return to Course Player &amp; Finish Modules
+                        </Link>
+                        <Link to={`/courses/${courseId}`} className="btn btn-outline-secondary px-4 py-2">
+                            Course Outline
+                        </Link>
+                    </div>
+                </div>
             </div>
         );
     }
@@ -161,10 +304,10 @@ const QuizPage = () => {
     if (!quiz || !quiz.questions || quiz.questions.length === 0) {
         return (
             <div className="container py-5 text-center">
-                <div className="card p-5 border-0 shadow-sm mx-auto" style={{ maxWidth: '600px' }}>
+                <div className="card p-5 border-0 shadow-sm mx-auto rounded-4" style={{ maxWidth: '600px' }}>
                     <div className="fs-1 mb-2">📋</div>
-                    <h4>No Assessment Found</h4>
-                    <p className="text-secondary">There are currently no active quizzes registered for this course.</p>
+                    <h4 className="fw-bold">No Assessment Found</h4>
+                    <p className="text-secondary">There are currently no active quizzes registered for this section.</p>
                     <Link to={`/courses/${courseId}`} className="btn btn-primary mt-3">Back to Course</Link>
                 </div>
             </div>
@@ -176,30 +319,29 @@ const QuizPage = () => {
     const progressPercent = Math.round((answeredCount / totalQuestions) * 100);
 
     // ==========================================
-    // RESULT SCREEN (Circular Gauge, Scorecard, Review & Certificate)
+    // RESULT SCREEN
     // ==========================================
     if (result) {
         return (
             <div className="container py-5">
                 <div className="row justify-content-center">
                     <div className="col-lg-10">
-                        {/* Summary Header Card with Circular Gauge */}
-                        <div className={`card border-0 shadow-sm mb-4 text-center p-4 p-md-5 ${
+                        {/* Summary Header Card */}
+                        <div className={`card border-0 shadow-sm mb-4 text-center p-4 p-md-5 rounded-4 ${
                             result.is_passed ? 'bg-success-subtle border-start border-success border-5' : 'bg-danger-subtle border-start border-danger border-5'
                         }`}>
                             <div className="display-4 mb-2">
                                 {result.is_passed ? '🎓' : '📚'}
                             </div>
                             <h2 className="fw-bold mb-1">
-                                {result.is_passed ? 'Congratulations! Assessment Completed!' : 'Assessment Not Passed'}
+                                {result.is_passed ? 'Congratulations! Examination Certified!' : 'Assessment Not Passed'}
                             </h2>
                             <p className="lead text-secondary mb-3">
                                 {result.is_passed 
                                     ? `You scored ${result.percentage}%, successfully satisfying the required ${result.passing_percentage}% passing threshold.`
-                                    : `You scored ${result.percentage}%. The passing threshold is ${result.passing_percentage}%. Review the questions below and retake when ready.`}
+                                    : `You scored ${result.percentage}%. The passing threshold is ${result.passing_percentage}%. Review the educational solutions below and retake when ready.`}
                             </p>
 
-                            {/* Circular Achievement Gauge */}
                             <CircularProgressGauge percentage={result.percentage} isPassed={result.is_passed} />
 
                             <div className="d-flex justify-content-center gap-4 flex-wrap mb-4">
@@ -208,16 +350,47 @@ const QuizPage = () => {
                                     <h3 className="fw-bold text-primary mb-0">{result.score} / {result.total_marks}</h3>
                                 </div>
                                 <div className="card p-3 border-0 shadow-sm bg-white rounded-3" style={{ minWidth: '150px' }}>
-                                    <small className="text-secondary">Passing Mark</small>
+                                    <small className="text-secondary">Passing Threshold</small>
                                     <h3 className="fw-bold text-dark mb-0">{result.passing_percentage}%</h3>
                                 </div>
                                 <div className="card p-3 border-0 shadow-sm bg-white rounded-3" style={{ minWidth: '150px' }}>
-                                    <small className="text-secondary">Final Status</small>
+                                    <small className="text-secondary">Accreditation Status</small>
                                     <h3 className={`fw-bold mb-0 ${result.is_passed ? 'text-success' : 'text-danger'}`}>
-                                        {result.is_passed ? 'PASSED' : 'NEEDS RETAKE'}
+                                        {result.is_passed ? 'CERTIFIED' : 'NEEDS RETAKE'}
                                     </h3>
                                 </div>
                             </div>
+
+                            {/* Email Certificate Form */}
+                            {result.is_passed && result.certificate_code && (
+                                <div className="card p-4 border-0 shadow-sm bg-white rounded-4 mb-4 text-start">
+                                    <h5 className="fw-bold text-primary mb-1">📧 Email Certificate to Existing Address</h5>
+                                    <p className="text-secondary small mb-3">
+                                        Send your official verified digital credential directly to your active email inbox.
+                                    </p>
+                                    <form onSubmit={handleSendCertificateEmail}>
+                                        <div className="input-group">
+                                            <input 
+                                                type="email" 
+                                                className="form-control" 
+                                                placeholder="Enter student's verified email address..." 
+                                                value={emailInput}
+                                                onChange={(e) => setEmailInput(e.target.value)}
+                                                required
+                                            />
+                                            <button 
+                                                type="submit" 
+                                                className="btn btn-success fw-bold px-4"
+                                                disabled={sendingEmail}
+                                            >
+                                                {sendingEmail ? 'Dispatching...' : 'Email Certificate 🚀'}
+                                            </button>
+                                        </div>
+                                        {emailError && <div className="alert alert-danger border-0 small mt-2 py-2">{emailError}</div>}
+                                        {emailSuccess && <div className="alert alert-success border-0 small mt-2 py-2">{emailSuccess}</div>}
+                                    </form>
+                                </div>
+                            )}
 
                             <div className="d-flex justify-content-center gap-3 flex-wrap">
                                 {result.is_passed && result.certificate_code && (
@@ -234,19 +407,19 @@ const QuizPage = () => {
                                         setActiveQuestionIndex(0);
                                     }}
                                 >
-                                    🔄 Retake Quiz
+                                    🔄 Retake Assessment
                                 </button>
                                 <Link to={`/learn/${courseId}`} className="btn btn-secondary btn-lg px-4">
-                                    Return to Lessons
+                                    Return to Course Player
                                 </Link>
                             </div>
                         </div>
 
-                        {/* Detailed Question Review with Educational Explanations */}
-                        <div className="card border-0 shadow-sm p-4">
+                        {/* Detailed Question Review */}
+                        <div className="card border-0 shadow-sm p-4 rounded-4 bg-white">
                             <h4 className="fw-bold mb-4">Question-by-Question Review &amp; Educational Feedback</h4>
                             {result.review && result.review.map((item, idx) => (
-                                <div key={item.question_id} className={`p-4 mb-4 rounded border ${
+                                <div key={item.question_id} className={`p-4 mb-4 rounded-3 border ${
                                     item.is_correct ? 'border-success bg-white' : 'border-danger bg-white'
                                 }`}>
                                     <div className="d-flex justify-content-between align-items-center mb-2">
@@ -258,7 +431,6 @@ const QuizPage = () => {
                                         </span>
                                     </div>
 
-                                    {/* Options breakdown */}
                                     <div className="list-group list-group-flush my-3">
                                         {item.options.map(opt => {
                                             const isUserChoice = item.selected_option_id === parseInt(opt.id);
@@ -283,7 +455,6 @@ const QuizPage = () => {
                                         })}
                                     </div>
 
-                                    {/* Educational Explanation Box */}
                                     {item.explanation && (
                                         <div className="p-3 bg-primary-subtle rounded text-primary-emphasis small">
                                             <strong>💡 Educational Insight:</strong> {item.explanation}
@@ -305,163 +476,79 @@ const QuizPage = () => {
 
     return (
         <div className="container py-4">
-            {/* Top Assessment Header */}
-            <div className="card border-0 shadow-sm p-4 mb-4 bg-white">
+            <div className="card border-0 shadow-sm p-4 mb-4 bg-white rounded-4">
                 <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
-                        <Link to={`/learn/${courseId}`} className="text-decoration-none text-secondary small">
-                            &larr; Back to Course Player
-                        </Link>
-                        <h3 className="fw-bold text-dark mt-1 mb-0">{quiz.title}</h3>
-                        <small className="text-secondary">
-                            Passing Threshold: <strong>{quiz.passing_percentage}%</strong> • Total Questions: <strong>{totalQuestions}</strong>
-                        </small>
+                        <span className="badge bg-primary mb-1">Official Course Assessment</span>
+                        <h4 className="fw-bold mb-0 text-dark">{quiz.title}</h4>
                     </div>
-
-                    <div className="text-end" style={{ minWidth: '180px' }}>
-                        <div className="d-flex justify-content-between small fw-bold mb-1">
-                            <span>Answered</span>
-                            <span>{answeredCount} / {totalQuestions}</span>
-                        </div>
-                        <div className="progress" style={{ height: '8px' }}>
-                            <div className="progress-bar bg-primary" role="progressbar" style={{ width: `${progressPercent}%` }}></div>
-                        </div>
+                    <div className="text-end">
+                        <span className="badge bg-light text-secondary border px-3 py-2">
+                            Progress: {answeredCount} / {totalQuestions} Answered ({progressPercent}%)
+                        </span>
                     </div>
-                </div>
-
-                {/* Quick Question Jump Strip */}
-                <hr className="my-3" />
-                <div className="d-flex gap-2 flex-wrap align-items-center">
-                    <span className="small text-secondary fw-semibold me-2">Jump to:</span>
-                    {quiz.questions.map((q, idx) => {
-                        const isAnswered = answers[q.id] !== undefined;
-                        const isSkipped = skippedQuestions.has(q.id);
-                        const isCurrent = idx === activeQuestionIndex;
-
-                        let btnClass = 'btn-outline-secondary';
-                        if (isCurrent) btnClass = 'btn-primary fw-bold';
-                        else if (isAnswered) btnClass = 'btn-success text-white';
-                        else if (isSkipped) btnClass = 'btn-warning text-dark';
-
-                        return (
-                            <button
-                                key={q.id}
-                                onClick={() => setActiveQuestionIndex(idx)}
-                                className={`btn btn-sm ${btnClass}`}
-                                style={{ width: '38px', height: '36px' }}
-                                title={`Question ${idx + 1}${isAnswered ? ' (Answered)' : isSkipped ? ' (Skipped)' : ''}`}
-                            >
-                                {idx + 1}
-                            </button>
-                        );
-                    })}
                 </div>
             </div>
 
-            {/* Question Card */}
             {currentQ && (
-                <div className="card border-0 shadow-sm p-4 p-md-5 mb-4 bg-white">
-                    <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                        <div className="d-flex align-items-center gap-2">
-                            <span className="badge bg-primary px-3 py-2 fs-6">
-                                Question {activeQuestionIndex + 1} of {totalQuestions}
-                            </span>
-                            <span className="badge bg-secondary-subtle text-secondary px-3 py-2">
-                                {currentQ.marks} Marks
-                            </span>
-                            {skippedQuestions.has(currentQ.id) && (
-                                <span className="badge bg-warning text-dark px-2 py-1">
-                                    Skipped
-                                </span>
-                            )}
-                        </div>
-                        <div>
-                            {isSpeaking ? (
-                                <button 
-                                    className="btn btn-danger btn-sm fw-bold px-3 shadow-sm"
-                                    onClick={stopSpeaking}
-                                >
-                                    ⏹️ Stop Voice
-                                </button>
-                            ) : (
-                                <button 
-                                    className="btn btn-outline-primary btn-sm fw-bold px-3 shadow-sm"
-                                    onClick={() => {
-                                        const optString = currentQ.options.map((o, idx) => `Choice ${idx + 1}: ${o.option_text}`).join('. ');
-                                        speak(`Question ${activeQuestionIndex + 1}: ${currentQ.text}. ${optString}`);
-                                    }}
-                                >
-                                    🔊 Listen to Question & Choices
-                                </button>
-                            )}
-                        </div>
+                <div className="card border-0 shadow-sm p-4 p-md-5 bg-white rounded-4 mb-4">
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                        <span className="badge bg-secondary-subtle text-secondary fs-6">
+                            Question {activeQuestionIndex + 1} of {totalQuestions}
+                        </span>
                     </div>
 
-                    <h4 className="fw-bold text-dark mb-4 lh-base">
-                        {currentQ.text}
-                    </h4>
+                    <h4 className="fw-bold text-dark mb-4">{currentQ.question_text}</h4>
 
-                    {/* Radio Options */}
                     <div className="d-flex flex-column gap-3 mb-4">
                         {currentQ.options.map(opt => {
                             const isSelected = answers[currentQ.id] === opt.id;
                             return (
-                                <label 
+                                <button
                                     key={opt.id}
                                     onClick={() => handleOptionSelect(currentQ.id, opt.id)}
-                                    className={`p-3 rounded-3 border d-flex align-items-center cursor-pointer transition-hover ${
-                                        isSelected ? 'border-primary bg-primary-subtle text-primary fw-semibold' : 'border-light-subtle bg-light text-dark'
+                                    className={`btn text-start p-3 rounded-3 d-flex align-items-center border ${
+                                        isSelected 
+                                            ? 'btn-primary text-white fw-bold shadow-sm' 
+                                            : 'btn-outline-light text-dark bg-light hover-shadow'
                                     }`}
-                                    style={{ cursor: 'pointer', transition: 'all 0.15s' }}
                                 >
-                                    <input 
-                                        type="radio"
-                                        name={`question_${currentQ.id}`}
-                                        checked={isSelected}
-                                        onChange={() => handleOptionSelect(currentQ.id, opt.id)}
-                                        className="form-check-input me-3 fs-5"
-                                    />
+                                    <span className={`badge me-3 rounded-circle p-2 ${isSelected ? 'bg-white text-primary' : 'bg-secondary text-white'}`}>
+                                        {['A', 'B', 'C', 'D'][opt.id] || '•'}
+                                    </span>
                                     <span className="fs-6">{opt.option_text}</span>
-                                </label>
+                                </button>
                             );
                         })}
                     </div>
 
-                    {/* Question Action Navigation with Skip, Next & Previous */}
-                    <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top flex-wrap gap-2">
+                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-3 border-top">
                         <button 
                             className="btn btn-outline-secondary"
                             disabled={activeQuestionIndex === 0}
                             onClick={() => setActiveQuestionIndex(prev => prev - 1)}
                         >
-                            &larr; Previous
+                            &larr; Previous Question
                         </button>
 
                         <div className="d-flex gap-2">
-                            {/* Skip Question Option */}
-                            {activeQuestionIndex < totalQuestions - 1 && (
-                                <button 
-                                    className="btn btn-outline-warning text-dark px-3 fw-semibold"
-                                    onClick={handleSkip}
-                                >
-                                    ⏭️ Skip Question
-                                </button>
-                            )}
-
+                            <button className="btn btn-outline-warning" onClick={handleSkip}>
+                                Skip for Now
+                            </button>
                             {activeQuestionIndex < totalQuestions - 1 ? (
                                 <button 
-                                    className="btn btn-primary px-4 fw-bold"
+                                    className="btn btn-primary px-4 fw-bold shadow-sm"
                                     onClick={() => setActiveQuestionIndex(prev => prev + 1)}
                                 >
                                     Next Question &rarr;
                                 </button>
                             ) : (
                                 <button 
-                                    className="btn btn-success btn-lg px-5 fw-bold shadow"
+                                    className="btn btn-success px-4 fw-bold shadow-sm"
                                     onClick={handleSubmit}
                                     disabled={submitting}
                                 >
-                                    {submitting ? 'Submitting...' : '✓ Submit Final Quiz'}
+                                    {submitting ? 'Submitting...' : 'Submit & Certify Assessment ✓'}
                                 </button>
                             )}
                         </div>
