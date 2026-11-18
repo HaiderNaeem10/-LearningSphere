@@ -130,5 +130,25 @@ LearningSphere/
 
 ---
 
+## 🔐 Security
+
+### Authentication
+- Users log in via **POST `/auth/login.php`**; a JWT is returned and stored in `localStorage`.
+- The token is automatically attached to all API calls through `api.js`.
+
+### Authorization
+- Backend endpoints include `AuthMiddleware.php`.
+  Example usage: `AuthMiddleware::requireAuth('student')` ensures only authenticated students can access the endpoint.
+- Role‑based protection is enforced for instructor (`'instructor'`) and admin (`'admin'`) routes.
+
+### Rate Limiting
+- `RateLimiter.php` caps requests (default 60 req/min per IP) on high‑traffic endpoints such as quiz submissions.
+
+### HTTP Security Headers
+- Netlify now serves CSP, X‑Frame‑Options, X‑Content‑Type‑Options, Referrer‑Policy, and Permissions‑Policy via the `_headers` file.
+
+### Front‑end Route Guard
+- The `ProtectedRoute` component wraps protected pages and redirects unauthenticated users to `/login`.
+
 ## 📜 License
 Distributed under the MIT License. Developed for universal accessibility and modern interactive computing education.
