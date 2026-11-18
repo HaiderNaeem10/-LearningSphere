@@ -13,6 +13,15 @@
     "preview": "vite preview",
     "desktop": "concurrently \"npm run dev\" \"wait-on tcp:5173 && electron .\"",
     "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false WIN_CSC_LINK= electron-builder --win --x64 --publish never",
+    "dist:norebuild": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false WIN_CSC_LINK= electron-builder --win --x64 --publish never",
+    "security-test": "node tests/security.test.js"
+  },
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "desktop": "concurrently \"npm run dev\" \"wait-on tcp:5173 && electron .\"",
+    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false WIN_CSC_LINK= electron-builder --win --x64 --publish never",
     "dist:norebuild": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false WIN_CSC_LINK= electron-builder --win --x64 --publish never"
   },
   "dependencies": {
