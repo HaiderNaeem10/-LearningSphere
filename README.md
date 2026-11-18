@@ -150,5 +150,21 @@ LearningSphere/
 ### Front‑end Route Guard
 - The `ProtectedRoute` component wraps protected pages and redirects unauthenticated users to `/login`.
 
-## 📜 License
+
+## 🧪 Test Accounts
+
+The project includes a helper script to create three demo accounts you can use for quick testing:
+
+```bash
+php backend/scripts/create_test_users.php
+```
+
+| Role       | Email                | Password |
+|------------|----------------------|----------|
+| Student    | `student@example.com`    | `TestPass123!` |
+| Instructor | `instructor@example.com` | `TestPass123!` |
+| Admin      | `admin@example.com`      | `TestPass123!` |
+
+Make sure the database connection in `backend/config/Database.php` points to the same database you are using for the application. After running the script, you should be able to log in via the UI or the API (`POST /api/auth/login.php`).
+
 Distributed under the MIT License. Developed for universal accessibility and modern interactive computing education.

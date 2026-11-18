@@ -10,6 +10,22 @@
 
 # SPA redirect rule so React Router routes (/courses, /learn/:id, /certificate/:code) never 404 on refresh
 [[redirects]]
-  from = "/*"
+  from = "/api/auth/login.php"
+  to = "/.netlify/functions/login"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/auth/register.php"
+  to = "/.netlify/functions/register"
+  status = 200
+  force = true
+
   to = "/index.html"
   status = 200
+
+[[redirects]]
+  from = "/api/auth/forgotPasswordRequest.php"
+  to = "/.netlify/functions/forgotPasswordRequest"
+  status = 200
+  force = true
